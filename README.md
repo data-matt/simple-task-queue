@@ -1,6 +1,6 @@
 # Task Queue with PostgreSQL SKIP LOCKED
 
-This repository demonstrates how to build an efficient task queue using PostgreSQL's `FOR UPDATE SKIP LOCKED` feature, providing row-level locking for parallel task processing without contention. This is the companion code for the blog post [Simplifying Task Queues with PostgreSQL](../task-queue-simplification.md).
+This repository demonstrates how to build an efficient task queue using PostgreSQL's `FOR UPDATE SKIP LOCKED` feature, providing row-level locking for parallel task processing without contention. This is the companion code for the blog post [Simplifying Task Queues with PostgreSQL](https://blog.gentrace.ai/task-queue-simplification).
 
 ## Features
 
