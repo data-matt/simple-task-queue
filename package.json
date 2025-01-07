@@ -1,0 +1,27 @@
+{
+  "name": "for-update-skip-locked",
+  "version": "0.1.0",
+  "description": "Example of PostgreSQL-based task runner",
+  "main": "dist/index.js",
+  "author": "Vivek Nair",
+  "scripts": {
+    "build": "tsc",
+    "start:runner": "ts-node src/runner.ts",
+    "start:scheduler": "ts-node src/scheduler.ts",
+    "start:all": "run-p start:runner start:scheduler",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.7.1",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@types/pg": "^8.10.9",
+    "npm-run-all": "^4.1.5",
+    "prisma": "^5.7.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
