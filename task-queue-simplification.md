@@ -1,9 +1,9 @@
 # Simplifying Task Queues with PostgreSQL
 
-At [Gentrace](https://gentrace.ai), we help companies systematically test their generative AI systems. We launch evaluation tasks that use both LLM-as-judge and heuristic evaluation methods. Our task queue system processes thousands of evaluation tasks daily, powering critical features like our aggregate statistics computation. For example, when companies run large-scale evaluations (often hundreds or thousands of test cases), we use asynchronous task queues to compute metrics like "better" scores, safety ratings, and human review status across all results:
+At [Gentrace](https://gentrace.ai), we help companies systematically test their generative AI systems. We launch evaluation tasks that use both LLM-as-judge and heuristic evaluation methods. Our task queue system processes thousands of evaluation tasks daily, powering critical features like our aggregate statistics computation. For example, when companies run large-scale evaluations (often thousands of test cases), we use asynchronous task queues to compute metrics like factual consistency and safety:
 
 ![Aggregate Statistics Example](images/test-result-list-aggregates.png)
-_Example of aggregate statistics computed asynchronously for test results, showing metrics like "better" scores (86.5%, 80.7%) and safety ratings (93.0%, 96.8%) across different prompt versions_
+_Example of aggregate statistics computed asynchronously for test results_
 
 Our task queue processes an average of 8,000-10,000 tasks per day, with spikes up to 45,000 tasks during peak periods when customers run large-scale evaluations:
 
@@ -250,7 +250,7 @@ While this solution has worked well for our use case, there are important consid
 
 ## Quickstart
 
-Want to implement this task queue pattern in your own project? We've a TypeScript starter repository that you can use as a foundation: [simple-task-queue](https://github.com/gentrace/simple-task-queue).
+Want to implement this task queue pattern in your own project? We have a TypeScript starter repository that you can use as a foundation: [simple-task-queue](https://github.com/gentrace/simple-task-queue).
 
 This repository includes:
 
@@ -259,9 +259,9 @@ This repository includes:
 - Example task implementations
 - Setup instructions and best practices
 
-Feel free to fork the repository and adapt it to your needs!
+Feel free to fork the repository and adapt it to your needs.
 
-## Join Us!
+## Join Us
 
 We're hiring senior and staff software engineers! We're looking for people who:
 
