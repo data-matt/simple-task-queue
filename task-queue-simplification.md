@@ -51,6 +51,72 @@ This approach helps us avoid:
 - Complex replication slot management
 - Potential issues with customer-provided database credentials
 
+Our implementation consists of four main components:
+
+### Task Queue
+
+The core component that manages task storage and retrieval. It handles task insertion, claiming tasks for processing, and maintaining task state. Using PostgreSQL's `FOR UPDATE SKIP LOCKED`, it ensures tasks are processed exactly once while supporting parallel processing.
+
+### Task Runner
+
+A worker process that continuously claims and executes tasks. It handles retries, error reporting, and ensures graceful shutdown. Multiple runners can operate in parallel, with PostgreSQL handling the concurrency control.
+
+### Task Scheduler
+
+Manages scheduled and recurring tasks, handling timing, intervals, and task registration. It supports both one-time delayed tasks and recurring tasks with configurable intervals.
+
+### Task Registry
+
+Provides type-safe task registration and instantiation, managing task definitions and their execution intervals:
+
+```typescript
+export enum TASK_STATUS {
+  SUCCESS = "SUCCESS",
+  FAILURE = "FAILURE",
+  IGNORED = "IGNORED",
+}
+
+export abstract class Task {
+  tries = 0;
+  type: string;
+  createdAt: number;
+  priority: number;
+
+  protected constructor(type: string, priority = 100) {
+    this.type = type;
+    this.createdAt = Date.now();
+    this.priority = priority;
+  }
+
+  abstract run(): Promise<TASK_STATUS>;
+}
+
+class TaskRegistry {
+  private types = new Map<string, { new (): Task }>();
+  private frequencies = new Map<string, number>();
+
+  register<T extends Task>(
+    typeStr: string,
+    type: { new (): T },
+    frequency?: number
+  ) {
+    this.types.set(typeStr, type);
+    if (frequency) {
+      this.frequencies.set(typeStr, frequency);
+    }
+  }
+
+  build(typeStr: string) {
+    const type = this.types.get(typeStr);
+    return type ? new type() : null;
+  }
+
+  getTimedTasks() {
+    return new Map(this.frequencies);
+  }
+}
+```
+
 Here's how we implemented this pattern:
 
 ```tsx
