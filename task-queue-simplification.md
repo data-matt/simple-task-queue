@@ -1,12 +1,32 @@
 # Simplifying Task Queues with PostgreSQL
 
-At [Gentrace](https://gentrace.ai), we help companies systematically test their generative AI systems. We launch evaluation tasks that use both LLM-as-judge and heuristic evaluation methods. While working on our evaluation infrastructure, we encountered an interesting architectural challenge: implementing our task queue strategy.
+At [Gentrace](https://gentrace.ai), we help companies systematically test their generative AI systems. We launch evaluation tasks that use both LLM-as-judge and heuristic evaluation methods. Our task queue system processes thousands of evaluation tasks daily, powering critical features like our aggregate statistics computation. For example, when companies run large-scale evaluations (often hundreds or thousands of test cases), we use asynchronous task queues to compute metrics like "better" scores, safety ratings, and human review status across all results:
 
-The conventional approach typically points to battle-tested solutions like RabbitMQ and Redis - excellent tools that have proven their worth in production environments for years.
+![Aggregate Statistics Example](images/test-result-list-aggregates.png)
+_Example of aggregate statistics computed asynchronously for test results, showing metrics like "better" scores (86.5%, 80.7%) and safety ratings (93.0%, 96.8%) across different prompt versions_
 
-We already had Kafka in our stack for ingesting observability data. While we initially considered it a natural fit, modeling task maturity and retries within Kafka's append-only log model proved overly complex (as documented in [Uber's excellent write-up on reliable reprocessing](https://www.uber.com/blog/reliable-reprocessing/)).
+Our task queue processes an average of 8,000-10,000 tasks per day, with spikes up to 45,000 tasks during peak periods when customers run large-scale evaluations:
 
-**Crux of the issue:** separate Kafka topics must be created for different processing intervals which makes it harder to have granular reprocessing times - this is an inherent limitation of topic processing. For example, if you want to retry a failed task after 5 minutes, 15 minutes, and 1 hour, you would need to create three separate topics and manage the message flow between them. This quickly becomes unwieldy as retry intervals become more granular or dynamic.
+![Task Completion Metrics](images/datadog-task-completions.png)
+_Task completion volume over a two-week period, demonstrating our system's ability to handle both steady-state and burst workloads_
+
+While working on our evaluation infrastructure, we encountered an interesting architectural challenge: implementing our task queue strategy.
+
+In our search for the right solution, we explored several options:
+
+### Modern SaaS Solutions
+
+First, we explored modern SaaS solutions like [Inngest](https://www.inngest.com/) and [Trigger.dev](https://trigger.dev/). These platforms offer impressive features - durable execution, retries, observability, and more out of the box. However, since many of our customers require self-hosted deployments for security and compliance reasons, we needed a solution we could package and distribute alongside our core product.
+
+### Traditional Message Queues
+
+The conventional approach then pointed us to battle-tested solutions like RabbitMQ and Redis - excellent tools that have proven their worth in production environments for years. But each additional infrastructure component would increase the operational burden for our self-hosted customers.
+
+### Kafka: Leveraging Existing Infrastructure
+
+We already had Kafka in our stack for ingesting observability data, so we naturally explored using it for task queues too. While Kafka's durability and throughput were appealing, modeling task maturity and retries within its append-only log model proved overly complex (as documented in [Uber's excellent write-up on reliable reprocessing](https://www.uber.com/blog/reliable-reprocessing/)).
+
+Separate Kafka topics must be created for different processing intervals which makes it harder to have granular reprocessing times - this is an inherent limitation of topic processing. For example, if you want to retry a failed task after 5 minutes, 15 minutes, and 1 hour, you would need to create three separate topics and manage the message flow between them. This quickly becomes unwieldy as retry intervals become more granular or dynamic.
 
 As we evaluated our options, we became increasingly worried about what we term "store explosion" - the gradual accumulation of different data stores in our stack. Each additional store introduces operational complexity, which is especially pernicious for our self-hosted customers who must manage these systems independently.
 
@@ -136,17 +156,6 @@ The solution has proven highly effective in production, delivering several key b
 
 Sometimes, PostgreSQL really is all you need.
 
-## Join Us!
-
-We're hiring senior and staff software engineers! We're looking for people who:
-
-- Have deep TypeScript expertise and love distributed systems
-- Build great developer tools and infrastructure
-- Care about creating delightful developer experiences
-- Want to help make AI safe and reliable
-
-Check out our open positions <a href="https://gentrace.ai/eng">here</a>
-
 ## Warnings
 
 While this solution has worked well for our use case, there are important considerations for high-throughput scenarios:
@@ -185,3 +194,14 @@ This repository includes:
 - Setup instructions and best practices
 
 Feel free to fork the repository and adapt it to your needs!
+
+## Join Us!
+
+We're hiring senior and staff software engineers! We're looking for people who:
+
+- Have deep TypeScript expertise and love distributed systems
+- Build great developer tools and infrastructure
+- Care about creating delightful developer experiences
+- Want to help make AI safe and reliable
+
+Check out our open positions <a href="https://gentrace.ai/eng">here</a>
