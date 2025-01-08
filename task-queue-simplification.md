@@ -1,12 +1,32 @@
 # Simplifying Task Queues with PostgreSQL
 
-At [Gentrace](https://gentrace.ai), we help companies systematically test their generative AI systems. We launch evaluation tasks that use both LLM-as-judge and heuristic evaluation methods. While working on our evaluation infrastructure, we encountered an interesting architectural challenge: implementing our task queue strategy.
+At [Gentrace](https://gentrace.ai), we help companies systematically test their generative AI systems. We launch evaluation tasks that use both LLM-as-judge and heuristic evaluation methods. Our task queue system processes thousands of evaluation tasks daily, powering critical features like our aggregate statistics computation. For example, when companies run large-scale evaluations (often thousands of test cases), we use asynchronous task queues to compute metrics like factual consistency and safety:
 
-The conventional approach typically points to battle-tested solutions like RabbitMQ and Redis - excellent tools that have proven their worth in production environments for years.
+![Aggregate Statistics Example](images/test-result-list-aggregates.png)
+_Example of aggregate statistics computed asynchronously for test results_
 
-We already had Kafka in our stack for ingesting observability data. While we initially considered it a natural fit, modeling task maturity and retries within Kafka's append-only log model proved overly complex (as documented in [Uber's excellent write-up on reliable reprocessing](https://www.uber.com/blog/reliable-reprocessing/)).
+Our task queue processes an average of 8,000-10,000 tasks per day, with spikes up to 45,000 tasks during peak periods when customers run large-scale evaluations:
 
-**Crux of the issue:** separate Kafka topics must be created for different processing intervals which makes it harder to have granular reprocessing times - this is an inherent limitation of topic processing. For example, if you want to retry a failed task after 5 minutes, 15 minutes, and 1 hour, you would need to create three separate topics and manage the message flow between them. This quickly becomes unwieldy as retry intervals become more granular or dynamic.
+![Task Completion Metrics](images/datadog-task-completions.png)
+_Task completion volume over a two-week period, demonstrating our system's ability to handle both steady-state and burst workloads_
+
+While working on our evaluation infrastructure, we encountered an interesting architectural challenge: implementing our task queue strategy.
+
+In our search for the right solution, we explored several options:
+
+### Modern SaaS Solutions
+
+First, we explored modern SaaS solutions like [Inngest](https://www.inngest.com/) and [Trigger.dev](https://trigger.dev/). These platforms offer impressive features - durable execution, retries, observability, and more out of the box. However, since many of our customers require self-hosted deployments for security and compliance reasons, we needed a solution we could package and distribute alongside our core product.
+
+### Traditional Message Queues
+
+The conventional approach then pointed us to battle-tested solutions like RabbitMQ and Redis - excellent tools that have proven their worth in production environments for years. But each additional infrastructure component would increase the operational burden for our self-hosted customers.
+
+### Kafka: Leveraging Existing Infrastructure
+
+We already had Kafka in our stack for ingesting observability data, so we naturally explored using it for task queues too. While Kafka's durability and throughput were appealing, modeling task maturity and retries within its append-only log model proved overly complex (as documented in [Uber's excellent write-up on reliable reprocessing](https://www.uber.com/blog/reliable-reprocessing/)).
+
+Separate Kafka topics must be created for different processing intervals which makes it harder to have granular reprocessing times - this is an inherent limitation of topic processing. For example, if you want to retry a failed task after 5 minutes, 15 minutes, and 1 hour, you would need to create three separate topics and manage the message flow between them. This quickly becomes unwieldy as retry intervals become more granular or dynamic.
 
 As we evaluated our options, we became increasingly worried about what we term "store explosion" - the gradual accumulation of different data stores in our stack. Each additional store introduces operational complexity, which is especially pernicious for our self-hosted customers who must manage these systems independently.
 
@@ -30,6 +50,72 @@ This approach helps us avoid:
 - Message size limitations (since `NOTIFY` is only used as a signal)
 - Complex replication slot management
 - Potential issues with customer-provided database credentials
+
+Our implementation consists of four main components:
+
+### Task Queue
+
+The core component that manages task storage and retrieval. It handles task insertion, claiming tasks for processing, and maintaining task state. Using PostgreSQL's `FOR UPDATE SKIP LOCKED`, it ensures tasks are processed exactly once while supporting parallel processing.
+
+### Task Runner
+
+A worker process that continuously claims and executes tasks. It handles retries, error reporting, and ensures graceful shutdown. Multiple runners can operate in parallel, with PostgreSQL handling the concurrency control.
+
+### Task Scheduler
+
+Manages scheduled and recurring tasks, handling timing, intervals, and task registration. It supports both one-time delayed tasks and recurring tasks with configurable intervals.
+
+### Task Registry
+
+Provides type-safe task registration and instantiation, managing task definitions and their execution intervals:
+
+```typescript
+export enum TASK_STATUS {
+  SUCCESS = "SUCCESS",
+  FAILURE = "FAILURE",
+  IGNORED = "IGNORED",
+}
+
+export abstract class Task {
+  tries = 0;
+  type: string;
+  createdAt: number;
+  priority: number;
+
+  protected constructor(type: string, priority = 100) {
+    this.type = type;
+    this.createdAt = Date.now();
+    this.priority = priority;
+  }
+
+  abstract run(): Promise<TASK_STATUS>;
+}
+
+class TaskRegistry {
+  private types = new Map<string, { new (): Task }>();
+  private frequencies = new Map<string, number>();
+
+  register<T extends Task>(
+    typeStr: string,
+    type: { new (): T },
+    frequency?: number
+  ) {
+    this.types.set(typeStr, type);
+    if (frequency) {
+      this.frequencies.set(typeStr, frequency);
+    }
+  }
+
+  build(typeStr: string) {
+    const type = this.types.get(typeStr);
+    return type ? new type() : null;
+  }
+
+  getTimedTasks() {
+    return new Map(this.frequencies);
+  }
+}
+```
 
 Here's how we implemented this pattern:
 
@@ -136,17 +222,6 @@ The solution has proven highly effective in production, delivering several key b
 
 Sometimes, PostgreSQL really is all you need.
 
-## Join Us!
-
-We're hiring senior and staff software engineers! We're looking for people who:
-
-- Have deep TypeScript expertise and love distributed systems
-- Build great developer tools and infrastructure
-- Care about creating delightful developer experiences
-- Want to help make AI safe and reliable
-
-Check out our open positions <a href="https://gentrace.ai/eng">here</a>
-
 ## Warnings
 
 While this solution has worked well for our use case, there are important considerations for high-throughput scenarios:
@@ -175,7 +250,7 @@ While this solution has worked well for our use case, there are important consid
 
 ## Quickstart
 
-Want to implement this task queue pattern in your own project? We've a TypeScript starter repository that you can use as a foundation: [simple-task-queue](https://github.com/gentrace/simple-task-queue).
+Want to implement this task queue pattern in your own project? We have a TypeScript starter repository that you can use as a foundation: [simple-task-queue](https://github.com/gentrace/simple-task-queue).
 
 This repository includes:
 
@@ -184,4 +259,15 @@ This repository includes:
 - Example task implementations
 - Setup instructions and best practices
 
-Feel free to fork the repository and adapt it to your needs!
+Feel free to fork the repository and adapt it to your needs.
+
+## Join Us
+
+We're hiring senior and staff software engineers! We're looking for people who:
+
+- Have deep TypeScript expertise and love distributed systems
+- Build great developer tools and infrastructure
+- Care about creating delightful developer experiences
+- Want to help make AI safe and reliable
+
+Check out our open positions <a href="https://gentrace.ai/eng">here</a>
